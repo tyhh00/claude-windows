@@ -31,6 +31,16 @@ Built for running 12 to 16 Claude Code sessions at once without losing your plac
 - Node.js (used to run Electron; no C++ compiler needed, the PTY ships prebuilt)
 - Claude Code installed and on PATH (`claude`)
 
+## Compatibility
+
+- **Claude Code hooks tested against: `2.1.x`.**
+
+The glow and resume features rely on Claude Code's hook schema (SessionStart, the Notification
+matchers `idle_prompt` and `permission_prompt`, Stop, and `claude --resume`). These were verified
+on the `2.1.x` line. If a future Claude Code release changes them, glow degrades gracefully
+(no crash) rather than breaking. Contributions that widen the tested range are very welcome:
+bump this note and add coverage as you confirm newer versions.
+
 ## Install and run
 
 ```bash
@@ -94,6 +104,12 @@ There is also `test/e2e-real.mjs`, a live test against an authenticated `claude`
 - Electron is pinned to `32` because its installer runs on Node 20; newer Electron needs Node 22.
 - Depends on Claude Code's hook schema (SessionStart, Notification matchers, `--resume`), verified
   against Claude Code 2.1.x. If those change, glow degrades gracefully rather than breaking.
+
+## Contributing
+
+Issues and pull requests are welcome. Good first areas: widening the tested Claude Code version
+range (see Compatibility), more layouts, packaging, and cross-checking the hook schema on newer
+Claude Code releases.
 
 ## License
 
