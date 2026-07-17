@@ -71,7 +71,7 @@ let signal = { port: 0, token: '' };
 function windowsDir() { return path.join(app.getPath('userData'), 'windows'); }
 function windowStateFile(id) { return path.join(windowsDir(), `${id}.json`); }
 function defaultWindowState(id, n) {
-  return { windowId: id, title: `window-${n}`, layout: { rows: 3, cols: 4 }, rootFolder: null, cells: {} };
+  return { windowId: id, title: `window-${n}`, layout: { rows: 3, cols: 4 }, rootFolder: null, cells: {}, panes: [], seq: 0 };
 }
 function nextWindowNumber() {
   let max = 0;
@@ -293,11 +293,14 @@ app.whenReady().then(async () => {
     const rec = recFromEvent(e); if (!rec) return;
     const gid = `${rec.state.windowId}#${index}`;
     const p = sessions.get(gid); if (p) { try { p.kill(); } catch (_) {} sessions.delete(gid); }
+    delete rec.state.cells[index];
+    scheduleWindowSave(rec);
   });
 
   ipcMain.on('cell:rename', (e, index, name) => { const rec = recFromEvent(e); if (rec) { cellRec(rec, index).name = name; scheduleWindowSave(rec); } });
   ipcMain.on('glow:changed', (e, index, g) => { const rec = recFromEvent(e); if (rec) { cellRec(rec, index).glow = g; scheduleWindowSave(rec); } });
   ipcMain.on('layout:changed', (e, rows, cols) => { const rec = recFromEvent(e); if (rec) { rec.state.layout = { rows, cols }; scheduleWindowSave(rec); } });
+  ipcMain.on('panes:changed', (e, panesArr, seq) => { const rec = recFromEvent(e); if (rec) { rec.state.panes = panesArr; rec.state.seq = seq; scheduleWindowSave(rec); } });
   ipcMain.on('settings:changed', (_e, s) => { settings = { ...settings, ...s }; saveSettings(); applyPerfSetting(); });
 
   // sounds (global)

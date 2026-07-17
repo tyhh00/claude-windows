@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('grid', {
   rename: (cellId, name) => ipcRenderer.send('cell:rename', cellId, name),
   glowChanged: (cellId, glow) => ipcRenderer.send('glow:changed', cellId, glow),
   layoutChanged: (rows, cols) => ipcRenderer.send('layout:changed', rows, cols),
+  panesChanged: (panes, seq) => ipcRenderer.send('panes:changed', panes, seq),
   settingsChanged: (settings) => ipcRenderer.send('settings:changed', settings),
 
   // request/response

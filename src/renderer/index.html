@@ -97,7 +97,26 @@
     body.perf-on .cell-perf { display: inline; }
     #perf-total { display: none; font-size: 11px; color: #7fd18b; font-family: Consolas, monospace; }
     body.perf-on #perf-total { display: inline; }
-    .cell .term { position: relative; flex: 1 1 auto; min-height: 0; padding: 4px; }
+    .pane-body { position: relative; flex: 1 1 auto; min-height: 0; }
+    .term-wrap { position: absolute; inset: 0; }
+    .term-wrap .term { position: absolute; inset: 4px; }
+
+    /* Tab strip in the pane header */
+    .tabs { display: flex; align-items: center; gap: 3px; flex: 1 1 auto; min-width: 0; overflow: hidden; }
+    .tab {
+      display: flex; align-items: center; gap: 4px; height: 18px; padding: 0 6px;
+      border-radius: 4px; background: #333; color: #a8a8a8; font-size: 11px; cursor: pointer;
+      max-width: 150px; min-width: 0;
+    }
+    .tab.active { background: #1e2b45; color: #dfe8ff; }
+    .tab .cell-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; outline: none; }
+    .tab .tab-close { color: #888; font-size: 13px; line-height: 1; padding: 0 1px; }
+    .tab .tab-close:hover { color: #fff; }
+    .tab.tab-idle::before, .tab.tab-permission::before {
+      content: ''; width: 6px; height: 6px; border-radius: 50%; flex: 0 0 auto;
+    }
+    .tab.tab-idle::before { background: #e0b23a; }
+    .tab.tab-permission::before { background: #5aa0ff; }
 
     /* Glow: done-and-waiting = steady amber; needs-permission = breathing blue. */
     .cell.glow-idle {
