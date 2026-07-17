@@ -10,8 +10,9 @@ import { launchApp, sleep, shot, tmpUserDataDir, bufOf } from './_helper.mjs';
 const udd = tmpUserDataDir();
 const rootDir = path.join(os.homedir(), 'claude-windows'); // an existing folder
 // One cell only, to keep it to a single real session.
-fs.writeFileSync(path.join(udd, 'state.json'),
-  JSON.stringify({ version: 1, layout: { rows: 1, cols: 1 }, settings: {}, cells: {} }));
+fs.mkdirSync(path.join(udd, 'windows'), { recursive: true });
+fs.writeFileSync(path.join(udd, 'windows', 'w1.json'),
+  JSON.stringify({ windowId: 'w1', title: 'window-1', layout: { rows: 1, cols: 1 }, rootFolder: null, cells: {} }));
 
 const sigs = (win) => win.evaluate(() => window.__signals || []);
 const glow0 = (win) => win.evaluate(() => window.__glow[0] || 'none');

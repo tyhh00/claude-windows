@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('grid', {
   onExit: (cb) => ipcRenderer.on('pty:exit', (_e, cellId) => cb(cellId)),
   onSignal: (cb) => ipcRenderer.on('signal', (_e, payload) => cb(payload)),
   onLaunched: (cb) => ipcRenderer.on('cell:launched', (_e, cellId, info) => cb(cellId, info)),
+  onPerf: (cb) => ipcRenderer.on('perf', (_e, data) => cb(data)),
 
   // hooks (explicit user action only)
   installHooks: () => ipcRenderer.invoke('hooks:install'),
@@ -35,4 +36,10 @@ contextBridge.exposeInMainWorld('grid', {
   relaunchApp: () => ipcRenderer.send('app:relaunch'),
   openInVsCode: (cellId) => ipcRenderer.send('cell:openInVsCode', cellId),
   openExternal: (url) => ipcRenderer.send('open:external', url),
+
+  // windows
+  windowInfo: () => ipcRenderer.invoke('window:info'),
+  newWindow: () => ipcRenderer.send('window:new'),
+  renameWindow: (title) => ipcRenderer.send('window:rename', title),
+  removeWindow: () => ipcRenderer.send('window:remove'),
 });

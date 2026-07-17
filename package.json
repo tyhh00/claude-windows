@@ -1,20 +1,25 @@
 {
   "name": "claude-windows",
-  "version": "0.0.1",
-  "description": "Grid manager for Claude Code sessions — many sessions in a configurable grid, glow when a session is waiting on you, resume the whole layout after a restart.",
+  "version": "0.1.0",
+  "description": "Grid manager for Claude Code sessions: many sessions in a configurable grid, glow when a session is waiting on you, resume the whole board after a restart.",
   "main": "src/main/main.js",
-  "author": "",
+  "author": "tyhh00",
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "test": "node test/hooks.cjs && node test/smoke.mjs && node test/grid.mjs && node test/signal.mjs && node test/glow.mjs && node test/persist.mjs && node test/settings.mjs",
+    "pack": "electron-builder",
+    "pack:portable": "electron-builder --win portable",
+    "pack:dir": "electron-builder --dir",
+    "icons": "node build/gen-icons.mjs",
+    "test": "node test/hooks.cjs && node test/smoke.mjs && node test/grid.mjs && node test/signal.mjs && node test/glow.mjs && node test/persist.mjs && node test/settings.mjs && node test/multiwindow.mjs && node test/perf.mjs",
     "test:smoke": "node test/smoke.mjs",
     "test:grid": "node test/grid.mjs",
     "test:signal": "node test/signal.mjs",
     "test:glow": "node test/glow.mjs",
     "test:persist": "node test/persist.mjs",
     "test:hooks": "node test/hooks.cjs",
-    "test:settings": "node test/settings.mjs"
+    "test:settings": "node test/settings.mjs",
+    "test:multiwindow": "node test/multiwindow.mjs"
   },
   "dependencies": {
     "@lydell/node-pty": "^1.1.0",
@@ -24,7 +29,23 @@
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",
     "electron": "^32.3.3",
+    "electron-builder": "^25.1.8",
     "playwright": "^1.61.1",
     "png-to-ico": "^3.0.2"
+  },
+  "build": {
+    "appId": "com.tyhh00.claude-windows",
+    "productName": "Claude Windows",
+    "asar": false,
+    "directories": { "output": "dist", "buildResources": "build" },
+    "files": ["src/**/*", "build/icon.png", "build/icon.ico", "build/icon.svg", "package.json", "node_modules/**/*"],
+    "win": { "target": ["portable", "nsis"], "icon": "build/icon.ico" },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Claude Windows"
+    },
+    "portable": { "artifactName": "ClaudeWindows-${version}-portable.exe" }
   }
 }

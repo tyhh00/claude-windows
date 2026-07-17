@@ -145,6 +145,7 @@ function createCell(i) {
     `<div class="cell-header">` +
       `<span class="cell-mark">${CLAUDE_MARK}</span>` +
       `<span class="cell-name" title="Right-click or double-click to rename"></span>` +
+      `<span class="cell-perf"></span>` +
       `<button class="cell-code" title="Open folder in VS Code">&lt;/&gt;</button>` +
     `</div>` +
     `<div class="term"></div>`;
@@ -193,6 +194,20 @@ function disposeCell(i) {
 
 // ---- Wiring ----------------------------------------------------------------
 window.grid.onLaunched((cellId, info) => { window.__launch[cellId] = info; });
+
+// Performance meter updates (only sent when perfView is on).
+window.__perf = {};
+window.grid.onPerf((data) => {
+  window.__perf = data;
+  for (const [i, c] of cells) {
+    const p = data.cells && data.cells[String(i)];
+    const el = c.el.querySelector('.cell-perf');
+    if (el) el.textContent = p ? `${p.cpu}% · ${p.mem}MB` : '';
+  }
+  const totalEl = document.getElementById('perf-total');
+  if (totalEl && data.total) totalEl.textContent = `Σ ${data.total.cpu}% · ${data.total.mem}MB`;
+});
+function applyPerfClass() { document.body.classList.toggle('perf-on', !!settings.perfView); }
 
 window.__signals = [];
 window.grid.onSignal((sig) => {
@@ -284,11 +299,13 @@ function buildHelpMenu() {
   const menu = document.getElementById('help-menu');
   menu.innerHTML =
     `<div class="menu-item" data-act="github">GitHub repo</div>` +
-    `<div class="menu-item" data-act="issues">Report an issue</div>`;
+    `<div class="menu-item" data-act="issues">Report an issue</div>` +
+    `<div class="menu-item" data-act="remove" style="color:#e07a7a">Remove this window</div>`;
   menu.querySelectorAll('.menu-item').forEach((el) => {
     el.addEventListener('click', () => {
       if (el.dataset.act === 'github') window.grid.openExternal(REPO_URL);
       if (el.dataset.act === 'issues') window.grid.openExternal(REPO_URL + '/issues');
+      if (el.dataset.act === 'remove') window.grid.removeWindow();
       menu.classList.remove('open');
     });
   });
@@ -319,6 +336,7 @@ function initSettingsUI() {
   $('set-launch').value = (settings.launch && settings.launch.command) || 'claude';
   $('set-done-enabled').checked = !!settings.doneSound.enabled;
   $('set-perm-enabled').checked = !!settings.permissionSound.enabled;
+  $('set-perf').checked = !!settings.perfView;
   $('done-file').textContent = settings.doneSound.path ? fileName(settings.doneSound.path) : 'no file';
   $('perm-file').textContent = settings.permissionSound.path ? fileName(settings.permissionSound.path) : 'no file';
 
@@ -330,6 +348,7 @@ function initSettingsUI() {
   });
   $('set-done-enabled').addEventListener('change', (e) => { settings.doneSound.enabled = e.target.checked; persistSettings(); });
   $('set-perm-enabled').addEventListener('change', (e) => { settings.permissionSound.enabled = e.target.checked; persistSettings(); });
+  $('set-perf').addEventListener('change', (e) => { settings.perfView = e.target.checked; persistSettings(); applyPerfClass(); });
 
   const pick = async (which) => {
     const r = await window.grid.pickSound();
@@ -375,12 +394,42 @@ async function initFolderUI() {
   });
 }
 
+async function initWindowUI() {
+  const info = await window.grid.windowInfo();
+  const titleEl = document.getElementById('win-title');
+  if (info) {
+    window.__windowId = info.windowId;
+    window.__windowTitle = info.title;
+    titleEl.textContent = info.title;
+  }
+  titleEl.addEventListener('dblclick', () => {
+    titleEl.setAttribute('contenteditable', 'true');
+    titleEl.focus();
+    const r = document.createRange(); r.selectNodeContents(titleEl);
+    const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+  });
+  titleEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); titleEl.blur(); }
+    e.stopPropagation();
+  });
+  titleEl.addEventListener('blur', () => {
+    titleEl.setAttribute('contenteditable', 'false');
+    const t = (titleEl.textContent || '').replace(/\s+/g, ' ').trim() || (window.__windowTitle || 'window');
+    titleEl.textContent = t;
+    window.__windowTitle = t;
+    window.grid.renameWindow(t);
+  });
+  document.getElementById('new-window-btn').addEventListener('click', () => window.grid.newWindow());
+}
+
 function afterSettings() {
   window.__settings = settings; // test hook
   loadSoundInto('done', settings.doneSound && settings.doneSound.path);
   loadSoundInto('permission', settings.permissionSound && settings.permissionSound.path);
   initSettingsUI();
   initFolderUI();
+  initWindowUI();
+  applyPerfClass();
 }
 
 // ---- Boot: pull persisted state, then build the grid -----------------------

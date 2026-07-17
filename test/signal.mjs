@@ -2,12 +2,12 @@
 // cell, and rejects a bad token.
 import { launchApp, sleep, runtime, fireHook } from './_helper.mjs';
 
-const { app, win } = await launchApp({ launchCmd: 'SHELL' });
+const { app, win, userDataDir } = await launchApp({ launchCmd: 'SHELL' });
 let fail = false;
 const assert = (c, m) => { if (!c) { fail = true; console.log('FAIL:', m); } else console.log('ok:', m); };
 try {
   await sleep(1500);
-  const rt = runtime();
+  const rt = runtime(userDataDir);
   console.log('signal server port:', rt.port);
 
   await fireHook({ kind: 'start', cell: 3, sessionId: 'sess-abc-123', port: rt.port, token: rt.token });

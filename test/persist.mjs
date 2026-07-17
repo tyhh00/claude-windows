@@ -16,7 +16,7 @@ const assert = (c, m) => { if (!c) { fail = true; console.log('FAIL:', m); } els
 {
   const { app, win } = await launchApp({ launchCmd: 'Write-Output launched', userDataDir: udd });
   await sleep(1500);
-  const rt = runtime();
+  const rt = runtime(udd);
 
   // Two "claude sessions" land in cells 0 and 1 with their own cwds.
   await fireHook({ kind: 'start', cell: 0, sessionId: 'SESS-AAA', port: rt.port, token: rt.token, cwd: alphaDir });
@@ -34,8 +34,8 @@ const assert = (c, m) => { if (!c) { fail = true; console.log('FAIL:', m); } els
   await app.close();
 }
 
-// ---- state.json on disk ----
-const st = JSON.parse(fs.readFileSync(path.join(udd, 'state.json'), 'utf8'));
+// ---- window state on disk ----
+const st = JSON.parse(fs.readFileSync(path.join(udd, 'windows', 'w1.json'), 'utf8'));
 assert(st.cells['0'].sessionId === 'SESS-AAA', 'cell0 sessionId persisted');
 assert(st.cells['0'].cwd === alphaDir, 'cell0 cwd persisted');
 assert(st.cells['0'].name === 'Alpha Session', 'cell0 name persisted');

@@ -16,6 +16,12 @@
       user-select: none;
     }
     #toolbar .brand { font-weight: 600; font-size: 13px; letter-spacing: .3px; display: flex; align-items: center; gap: 7px; }
+    #win-title {
+      font-size: 12px; color: #9ab; background: #2d2d2d; border: 1px solid var(--border);
+      border-radius: 4px; padding: 2px 8px; outline: none; max-width: 160px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    #win-title[contenteditable="true"] { background: #10233f; color: #fff; }
     #toolbar label { font-size: 12px; display: flex; align-items: center; gap: 6px; }
     #toolbar select {
       background: #333; color: var(--fg); border: 1px solid var(--border);
@@ -87,6 +93,10 @@
       padding: 1px 5px;
     }
     .cell-code:hover { color: #cfe0ff; border-color: var(--border); background: #1e2b45; }
+    .cell-perf { flex: 0 0 auto; font-size: 10px; color: #7fd18b; font-family: Consolas, monospace; display: none; }
+    body.perf-on .cell-perf { display: inline; }
+    #perf-total { display: none; font-size: 11px; color: #7fd18b; font-family: Consolas, monospace; }
+    body.perf-on #perf-total { display: inline; }
     .cell .term { position: relative; flex: 1 1 auto; min-height: 0; padding: 4px; }
 
     /* Glow: done-and-waiting = steady amber; needs-permission = breathing blue. */
@@ -161,12 +171,15 @@
       </svg>
       Claude Windows
     </span>
+    <span id="win-title" title="Double-click to rename this window"></span>
+    <button id="new-window-btn" class="icon-btn" title="New window (for another monitor)">＋</button>
     <div id="layout-picker" class="picker">
       <button id="layout-btn" class="picker-btn" title="Layout"></button>
       <div id="layout-menu" class="menu"></div>
     </div>
     <button id="folder-btn" class="folder-btn" title="Open folder, new sessions start here">📁 <span id="folder-name">home</span></button>
     <span class="status" id="status"></span>
+    <span id="perf-total" title="This window: total CPU / RAM of its Claude sessions"></span>
     <div id="help-picker" class="picker">
       <button id="help-btn" class="icon-btn" title="Help">?</button>
       <div id="help-menu" class="menu right"></div>
@@ -233,6 +246,15 @@
         </div>
         <button class="btn accent" id="hooks-connect">Connect</button>
         <button class="btn" id="hooks-disconnect">Disconnect</button>
+      </div>
+
+      <div class="section-title">Debug</div>
+      <div class="row">
+        <div class="grow">
+          <label class="main" for="set-perf">Performance view</label>
+          <div class="hint">show per-session and per-window CPU / RAM (samples every ~2.5s)</div>
+        </div>
+        <input type="checkbox" id="set-perf" />
       </div>
 
       <div class="close-row">

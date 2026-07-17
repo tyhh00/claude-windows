@@ -5,12 +5,12 @@ const glowOf = (win, i) => win.evaluate((n) => window.__glow[n] || 'none', i);
 const hasClass = (win, i, cls) =>
   win.locator(`.cell[data-cell="${i}"]`).evaluate((el, c) => el.classList.contains(c), cls);
 
-const { app, win } = await launchApp({ launchCmd: 'SHELL' });
+const { app, win, userDataDir } = await launchApp({ launchCmd: 'SHELL' });
 let fail = false;
 const assert = (c, m) => { if (!c) { fail = true; console.log('FAIL:', m); } else console.log('ok:', m); };
 try {
   await sleep(1500);
-  const rt = runtime();
+  const rt = runtime(userDataDir);
 
   await fireHook({ kind: 'idle', cell: 2, port: rt.port, token: rt.token });
   await sleep(700);

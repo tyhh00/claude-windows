@@ -29,8 +29,8 @@ export async function launchApp({ launchCmd = 'SHELL', userDataDir, extraEnv = {
   return { app, win, userDataDir: udd };
 }
 
-export function runtime() {
-  return JSON.parse(fs.readFileSync(path.join(os.tmpdir(), 'claude-windows-runtime.json'), 'utf8'));
+export function runtime(userDataDir) {
+  return JSON.parse(fs.readFileSync(path.join(userDataDir, 'runtime.json'), 'utf8'));
 }
 
 // Run the REAL signal.ps1 exactly as Claude Code would.

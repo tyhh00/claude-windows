@@ -37,12 +37,12 @@ const assert = (c, m) => { if (!c) { fail = true; console.log('FAIL:', m); } els
   await app.close();
 }
 
-// ---- state.json reflects the changes ----
-const st = JSON.parse(fs.readFileSync(path.join(udd, 'state.json'), 'utf8'));
-assert(st.settings.glowEnabled === false, 'glowEnabled persisted (false)');
-assert(st.settings.glowOn === 'stop', 'glowOn persisted (stop)');
-assert(st.settings.launch.command === 'claude --resume-picker', 'launch command persisted');
-assert(st.settings.doneSound.enabled === true, 'doneSound enabled persisted');
+// ---- global settings.json reflects the changes ----
+const s2 = JSON.parse(fs.readFileSync(path.join(udd, 'settings.json'), 'utf8'));
+assert(s2.glowEnabled === false, 'glowEnabled persisted (false)');
+assert(s2.glowOn === 'stop', 'glowOn persisted (stop)');
+assert(s2.launch.command === 'claude --resume-picker', 'launch command persisted');
+assert(s2.doneSound.enabled === true, 'doneSound enabled persisted');
 
 // ---- hooks written to the ISOLATED config dir (never the real ~/.claude) ----
 const hj = JSON.parse(fs.readFileSync(path.join(cfgDir, 'settings.json'), 'utf8'));
