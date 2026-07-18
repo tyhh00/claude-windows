@@ -75,12 +75,14 @@ const sessions = new Map(); // `${windowId}#${index}` -> pty
 let signal = { port: 0, token: '' };
 let homeWin = null;         // the launcher/home window (no grid); null once a workspace is opened
 let homeWcId = null;
+let appQuitting = false;    // set on before-quit so a clean quit restores windows (not marked closed)
+app.on('before-quit', () => { appQuitting = true; });
 
 function windowsDir() { return path.join(app.getPath('userData'), 'windows'); }
 function windowStateFile(id) { return path.join(windowsDir(), `${id}.json`); }
 function baseName(f) { return String(f || '').split(/[\\/]/).filter(Boolean).pop() || 'window'; }
 function defaultWindowState(id, n, folder) {
-  return { windowId: id, title: `${baseName(folder)}-${n}`, workspace: folder, layout: { rows: 3, cols: 4 }, cells: {}, panes: [], seq: 0 };
+  return { windowId: id, title: `${baseName(folder)}-${n}`, workspace: folder, open: true, layout: { rows: 3, cols: 4 }, cells: {}, panes: [], seq: 0 };
 }
 // The folder a window (or the invoking IPC sender) belongs to. Windows are per-folder, so this is
 // per-window — NOT a single global workspace, which lets several folders be open at once.
@@ -185,8 +187,19 @@ function readHead(file, bytes = 262144) {
 // A session is only resumable if Claude actually persisted a conversation (a user turn exists).
 // A session opened but never used has no real transcript, and `claude --resume` errors.
 function isResumable(sessionId, cwd) {
+  return resumeInfo(sessionId, cwd).ok;
+}
+// Decide whether/where to resume. `claude --resume <id>` only looks in the CURRENT directory's
+// project folder, so we must launch it in the exact cwd the transcript was recorded under (read
+// from the transcript itself) — not wherever the cell was last saved. This fixes the intermittent
+// "No conversation found with session ID" when a session's real folder differs from the cell's.
+function resumeInfo(sessionId, cwd) {
+  if (!sessionId) return { ok: false };
   const file = sessionTranscriptFile(sessionId, cwd);
-  return !!file && /"type"\s*:\s*"user"/.test(readHead(file));
+  if (!file) return { ok: false };
+  const head = readHead(file);
+  if (!/"type"\s*:\s*"user"/.test(head)) return { ok: false };
+  return { ok: true, cwd: cwdFromText(head) || cwd };
 }
 // Encode a folder path the way Claude stores its per-project transcript directory.
 function encodeProject(folder) { return String(folder).replace(/[:\\/]/g, '-'); }
@@ -290,6 +303,7 @@ function createWindow(state) {
   });
   const wcId = win.webContents.id; // capture now; webContents is gone by 'closed'
   const rec = { win, wcId, state, saveTimer: null, removed: false };
+  state.open = true; // it's open now
   windows.set(state.windowId, rec);
   wcToWin.set(wcId, state.windowId);
   wireExternalLinks(win);
@@ -304,7 +318,13 @@ function createWindow(state) {
     else if (input.key === '0') { set(0); event.preventDefault(); }
   });
 
-  win.on('close', () => { if (!rec.removed) saveWindowNow(rec); });
+  win.on('close', () => {
+    if (rec.removed) return;
+    // A window the USER closes (while the app keeps running) is remembered as closed, so reopening
+    // its folder doesn't pop it back up. A clean app quit leaves open=true so everything restores.
+    if (!appQuitting && windows.size > 1) rec.state.open = false;
+    saveWindowNow(rec);
+  });
   win.on('closed', () => {
     for (const [gid, proc] of sessions) {
       if (gid.startsWith(state.windowId + '#')) { try { proc.kill(); } catch (_) {} sessions.delete(gid); }
@@ -328,26 +348,57 @@ function openSavedWindows(folder) {
     }
   } catch (_) {}
 
-  const states = [];
+  const mine = [];
   for (const st of all) {
     if (st.workspace === undefined || st.workspace === null) {
-      // Legacy window (pre per-folder): adopt it into the folder being opened.
-      st.workspace = folder;
+      st.workspace = folder; // legacy window (pre per-folder): adopt it into the folder being opened
       writeJsonAtomic(windowStateFile(st.windowId), st);
-      states.push(st);
+      mine.push(st);
     } else if (normFolder(st.workspace) === cw) {
-      states.push(st);
+      mine.push(st);
     }
   }
-  states.sort((a, b) => String(a.windowId).localeCompare(String(b.windowId), undefined, { numeric: true }));
+  mine.sort((a, b) => String(a.windowId).localeCompare(String(b.windowId), undefined, { numeric: true }));
 
-  if (states.length === 0) {
+  // Only reopen windows that were open (open !== false). If none were, open the most recent one so
+  // the folder isn't empty. Brand-new folder -> a default window.
+  let toOpen = mine.filter((st) => st.open !== false);
+  if (toOpen.length === 0 && mine.length > 0) { toOpen = [mine[mine.length - 1]]; }
+  if (toOpen.length === 0) {
     const { n, id } = nextWindowInfo(folder);
     const st = defaultWindowState(id, n, folder);
     writeJsonAtomic(windowStateFile(id), st);
-    states.push(st);
+    toOpen = [st];
   }
-  for (const st of states) if (!windows.has(st.windowId)) createWindow(st);
+  for (const st of toOpen) if (!windows.has(st.windowId)) createWindow(st);
+}
+// All saved windows for a folder (open + closed), for the window dropdown.
+function listFolderWindows(folder) {
+  const cw = normFolder(folder);
+  const out = [];
+  const seen = new Set();
+  for (const rec of windows.values()) {
+    if (normFolder(rec.state.workspace) !== cw) continue;
+    out.push({ windowId: rec.state.windowId, title: rec.state.title, open: true });
+    seen.add(rec.state.windowId);
+  }
+  try {
+    for (const f of fs.readdirSync(windowsDir())) {
+      if (!f.endsWith('.json')) continue;
+      let st; try { st = JSON.parse(fs.readFileSync(path.join(windowsDir(), f), 'utf8')); } catch (_) { continue; }
+      if (!st || seen.has(st.windowId) || normFolder(st.workspace) !== cw) continue;
+      out.push({ windowId: st.windowId, title: st.title, open: false });
+    }
+  } catch (_) {}
+  out.sort((a, b) => String(a.windowId).localeCompare(String(b.windowId), undefined, { numeric: true }));
+  return out;
+}
+// Open a saved-but-closed window by id.
+function openExistingWindow(id) {
+  if (windows.has(id)) { const r = windows.get(id); if (r.win && !r.win.isDestroyed()) r.win.focus(); return; }
+  let st; try { st = JSON.parse(fs.readFileSync(windowStateFile(id), 'utf8')); } catch (_) { return; }
+  st.open = true;
+  createWindow(st);
 }
 
 // The launcher window: the app opens here (a folder chooser) with NO grid and NO sessions spawned.
@@ -540,7 +591,10 @@ app.whenReady().then(async () => {
   ipcMain.handle('session:topic', (e, index) => {
     const rec = recFromEvent(e); if (!rec) return null;
     const c = rec.state.cells[index];
-    return (c && c.sessionId) ? firstPrompt(c.sessionId, c.cwd) : null;
+    if (!c || !c.sessionId) return null;
+    const file = sessionTranscriptFile(c.sessionId, c.cwd);
+    let mtime = 0; try { if (file) mtime = fs.statSync(file).mtimeMs; } catch (_) {}
+    return { topic: firstPrompt(c.sessionId, c.cwd), mtime };
   });
 
   ipcMain.handle('hooks:install', () => hooks.installHooks(HOOK_SCRIPT));
@@ -550,9 +604,13 @@ app.whenReady().then(async () => {
     const rec = recFromEvent(e); if (!rec) return;
     if (sessions.has(`${rec.state.windowId}#${index}`)) return;
     const saved = rec.state.cells[index] || {};
-    // Only resume sessions that actually have a persisted conversation.
-    const resumeId = isResumable(saved.sessionId, saved.cwd) ? saved.sessionId : undefined;
-    spawnCell(rec.state.windowId, index, { cols, rows, cwd: saved.cwd, resumeId });
+    // Only resume sessions with a persisted conversation, and do it in the folder the transcript
+    // was actually recorded under (so `claude --resume` can find it).
+    const info = resumeInfo(saved.sessionId, saved.cwd);
+    const resumeId = info.ok ? saved.sessionId : undefined;
+    const cwd = info.ok ? info.cwd : saved.cwd;
+    if (info.ok && info.cwd && info.cwd !== saved.cwd) { const c = cellRec(rec, index); c.cwd = info.cwd; scheduleWindowSave(rec); }
+    spawnCell(rec.state.windowId, index, { cols, rows, cwd, resumeId });
   });
   ipcMain.on('pty:input', (e, index, data) => {
     const rec = recFromEvent(e); if (!rec) return;
@@ -682,16 +740,11 @@ app.whenReady().then(async () => {
   ipcMain.handle('windows:list', (e) => {
     const rec = recFromEvent(e);
     const folder = folderOf(rec);
-    const cw = normFolder(folder);
-    const out = [];
-    for (const r of windows.values()) {
-      if (normFolder(r.state.workspace) !== cw) continue;
-      out.push({ windowId: r.state.windowId, title: r.state.title, current: r === rec });
-    }
-    out.sort((a, b) => String(a.windowId).localeCompare(String(b.windowId), undefined, { numeric: true }));
-    return { folder, windows: out };
+    const wins = listFolderWindows(folder).map((w) => ({ ...w, current: !!(rec && w.windowId === rec.state.windowId) }));
+    return { folder, windows: wins };
   });
   ipcMain.on('window:focus', (_e, id) => { const r = windows.get(id); if (r && r.win && !r.win.isDestroyed()) { if (r.win.isMinimized()) r.win.restore(); r.win.focus(); } });
+  ipcMain.on('window:openExisting', (_e, id) => openExistingWindow(id));
   ipcMain.on('window:rename', (e, title) => {
     const rec = recFromEvent(e); if (!rec) return;
     rec.state.title = String(title || '').trim() || rec.state.title;

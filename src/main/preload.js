@@ -59,6 +59,7 @@ contextBridge.exposeInMainWorld('grid', {
   removeWindow: () => ipcRenderer.send('window:remove'),
   listWindows: () => ipcRenderer.invoke('windows:list'),
   focusWindow: (id) => ipcRenderer.send('window:focus', id),
+  openExistingWindow: (id) => ipcRenderer.send('window:openExisting', id),
 
   // clipboard (Ctrl+V paste / Ctrl+C copy in the terminal — the app menu is disabled, which on
   // Windows also strips the default paste accelerator, so we bridge the clipboard ourselves)

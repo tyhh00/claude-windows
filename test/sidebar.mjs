@@ -38,14 +38,14 @@ try {
   await sleep(400);
   assert((await win.locator('.cell[data-pane="3"]').getAttribute('data-cell')) === '3', 'clicking a sidebar row activates that session');
 
-  // Collapse from the header control; re-open from the toolbar affordance that appears while collapsed.
+  // Collapse/expand from the rail control (stays in the left panel, not the top nav).
   await win.locator('#sb-collapse').click();
   await sleep(300);
-  assert(await win.evaluate(() => document.body.classList.contains('sb-collapsed')), 'header control collapses the sidebar');
-  assert(await win.locator('#sb-toggle').isVisible(), 'toolbar re-open affordance appears while collapsed');
-  await win.locator('#sb-toggle').click();
+  assert(await win.evaluate(() => document.body.classList.contains('sb-collapsed')), 'rail control collapses the sidebar');
+  assert(await win.locator('#sb-collapse').isVisible(), 'rail toggle stays visible while collapsed');
+  await win.locator('#sb-collapse').click();
   await sleep(300);
-  assert(!(await win.evaluate(() => document.body.classList.contains('sb-collapsed'))), 'toolbar affordance re-opens the sidebar');
+  assert(!(await win.evaluate(() => document.body.classList.contains('sb-collapsed'))), 'rail toggle re-opens the sidebar');
 
   console.log(fail ? 'RESULT: FAIL' : 'RESULT: PASS');
 } finally {

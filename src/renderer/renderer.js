@@ -320,7 +320,7 @@ function setGlow(sid, s, { persist = true } = {}) {
 }
 function clearGlow(sid) { const r = terms.get(sid); if (r && r.glow !== 'none') setGlow(sid, 'none'); }
 // Mark a session "real" (resumed, or the user/agent has engaged) so it surfaces in the sidebar.
-function markReal(sid) { const r = terms.get(sid); if (r && !r.real) { r.real = true; scheduleSidebar(); } }
+function markReal(sid) { const r = terms.get(sid); if (r) { r.real = true; r.lastActivity = Date.now(); scheduleSidebar(); } }
 function setRunning(sid, on) {
   const r = terms.get(sid); if (!r) return;
   if (r.running === on) return;
@@ -355,6 +355,7 @@ window.grid.onSignal((sig) => {
   const trec = terms.get(sid);
   if (trec) {
     trec.topicFetched = false; // may have new content -> refresh topic
+    trec.lastActivity = Date.now();
     // Any post-start signal (turn end / waiting / permission) means real activity happened here.
     if (sig.kind !== 'start') trec.real = true;
   }
@@ -410,7 +411,26 @@ function fetchTopic(sid) {
   const rec = terms.get(sid);
   if (!rec || rec.topicFetched) return;
   rec.topicFetched = true;
-  window.grid.sessionTopic(sid).then((t) => { if (t && t !== rec.topic) { rec.topic = t; scheduleSidebar(); } });
+  window.grid.sessionTopic(sid).then((r) => {
+    if (!r) return;
+    const t = terms.get(sid); if (!t) return;
+    let changed = false;
+    if (r.topic && r.topic !== t.topic) { t.topic = r.topic; changed = true; }
+    if (r.mtime && r.mtime > (t.lastActivity || 0)) { t.lastActivity = r.mtime; changed = true; }
+    if (changed) scheduleSidebar();
+  });
+}
+// Recency bucket for the sidebar section titles.
+function recencyBucket(ms) {
+  if (!ms) return 'Older';
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startWeek = startToday - ((now.getDay() + 6) % 7) * 86400000; // week starts Monday
+  const startMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  if (ms >= startToday) return 'Today';
+  if (ms >= startWeek) return 'This week';
+  if (ms >= startMonth) return 'This month';
+  return 'Older';
 }
 function renderSidebar() {
   const listEl = document.getElementById('sb-list');
@@ -423,25 +443,33 @@ function renderSidebar() {
     listEl.innerHTML = '<div class="sb-empty">No active sessions yet. They show up here once a Claude session is running or resumed.</div>';
     return;
   }
-  const prio = (sid) => { const g = terms.get(sid)?.glow; return g === 'permission' ? 0 : g === 'idle' ? 1 : 2; };
-  items.sort((a, b) => prio(a.sid) - prio(b.sid) || a.pi - b.pi || a.ti - b.ti); // needs-you floated to top
+  const recOf = (it) => terms.get(it.sid);
+  const glowing = (it) => recOf(it) && recOf(it).glow !== 'none';
+  // Needs-you (glowing) pinned on top, permission before idle; everything else grouped by recency.
+  const needs = items.filter(glowing).sort((a, b) => {
+    const p = (it) => (recOf(it).glow === 'permission' ? 0 : 1);
+    return p(a) - p(b) || (recOf(b).lastActivity || 0) - (recOf(a).lastActivity || 0);
+  });
+  const rest = items.filter((it) => !glowing(it)).sort((a, b) => (recOf(b).lastActivity || 0) - (recOf(a).lastActivity || 0));
 
-  // The panel header already says "Sessions", so only label the needs-you split (and the rest once).
-  const hasNeeds = items.some((it) => terms.get(it.sid)?.glow !== 'none');
-  let html = '', lastSection = null;
-  for (const { sid } of items) {
-    const rec = terms.get(sid); if (!rec) continue;
-    const needs = rec.glow !== 'none';
-    const section = needs ? 'Needs you' : (hasNeeds ? 'Active' : null);
-    if (section && section !== lastSection) { html += `<div class="sb-section">${section}</div>`; lastSection = section; }
+  const rowHtml = (sid) => {
+    const rec = terms.get(sid);
     const active = paneOf(sid)?.active === sid;
     const dot = rec.glow !== 'none' ? rec.glow : (rec.running ? 'running' : 'none');
-    // Subtitle = a preview of the conversation, but only when it adds something over the title.
     const showTopic = rec.topic && !sameStart(rec.name, rec.topic);
-    html += `<div class="sb-item${active ? ' active' : ''}" data-sid="${sid}">` +
+    return `<div class="sb-item${active ? ' active' : ''}" data-sid="${sid}">` +
       `<span class="sb-dot ${dot}"></span>` +
       `<span class="sb-body"><span class="sb-name">${escapeHtml(rec.name)}</span>` +
       (showTopic ? `<span class="sb-topic">${escapeHtml(rec.topic)}</span>` : '') + '</span></div>';
+  };
+
+  let html = '';
+  if (needs.length) { html += '<div class="sb-section">Needs you</div>' + needs.map((it) => rowHtml(it.sid)).join(''); }
+  let lastBucket = null;
+  for (const it of rest) {
+    const bucket = recencyBucket(recOf(it).lastActivity);
+    if (bucket !== lastBucket) { html += `<div class="sb-section">${bucket}</div>`; lastBucket = bucket; }
+    html += rowHtml(it.sid);
   }
   listEl.innerHTML = html;
   listEl.querySelectorAll('.sb-item').forEach((el) => {
@@ -452,14 +480,12 @@ function renderSidebar() {
 function applySidebar() {
   const c = !!settings.sidebarCollapsed;
   document.body.classList.toggle('sb-collapsed', c);
-  // The re-open affordance in the toolbar only appears while collapsed.
-  const t = document.getElementById('sb-toggle');
-  if (t) t.style.display = c ? 'inline-flex' : 'none';
+  const btn = document.getElementById('sb-collapse');
+  if (btn) { btn.textContent = c ? '☰' : '«'; btn.title = c ? 'Show sessions' : 'Hide sessions'; }
 }
 function setSidebarCollapsed(c) { settings.sidebarCollapsed = c; applySidebar(); persistSettings(); }
 function initSidebar() {
-  document.getElementById('sb-collapse').addEventListener('click', () => setSidebarCollapsed(true));
-  document.getElementById('sb-toggle').addEventListener('click', () => setSidebarCollapsed(false));
+  document.getElementById('sb-collapse').addEventListener('click', () => setSidebarCollapsed(!settings.sidebarCollapsed));
   applySidebar();
   renderSidebar();
 }
@@ -713,15 +739,21 @@ async function initWindowUI() {
   async function build() {
     const { folder, windows: wins } = await window.grid.listWindows();
     let html = `<div class="group-label">Windows · ${escapeHtml(bn(folder))}</div>`;
-    html += wins.map((w) =>
-      `<div class="menu-item${w.current ? ' wm-current' : ''}" data-focus="${escapeHtml(w.windowId)}">${escapeHtml(w.title)}${w.current ? ' (this)' : ''}</div>`).join('');
+    html += wins.map((w) => {
+      const cls = 'menu-item wm-win' + (w.current ? ' wm-current' : '') + (w.open ? '' : ' wm-closed');
+      const tag = w.current ? '<span class="wm-tag">this</span>' : (w.open ? '<span class="wm-tag open">open</span>' : '<span class="wm-tag">closed</span>');
+      return `<div class="${cls}" data-win="${escapeHtml(w.windowId)}" data-open="${w.open ? 1 : 0}"><span class="wm-name">${escapeHtml(w.title)}</span>${tag}</div>`;
+    }).join('');
     html += `<div class="menu-item open-row" data-new="1">＋ New window for ${escapeHtml(bn(folder))}</div>`;
     html += `<div class="menu-item" data-rename="1">✎ Rename this window</div>`;
     html += `<div class="menu-item" data-openfolder="1">📂 Open another folder…</div>`;
     menu.innerHTML = html;
-    menu.querySelectorAll('[data-focus]').forEach((el) => el.addEventListener('click', () => {
+    menu.querySelectorAll('[data-win]').forEach((el) => el.addEventListener('click', () => {
       menu.classList.remove('open');
-      if (el.dataset.focus !== window.__windowId) window.grid.focusWindow(el.dataset.focus);
+      const id = el.dataset.win;
+      if (id === window.__windowId) return;              // already here
+      if (el.dataset.open === '1') window.grid.focusWindow(id);      // open -> focus it
+      else window.grid.openExistingWindow(id);                       // closed -> open it
     }));
     menu.querySelector('[data-new]').addEventListener('click', () => { menu.classList.remove('open'); window.grid.newWindow(); });
     menu.querySelector('[data-rename]').addEventListener('click', () => { menu.classList.remove('open'); startWindowRename(); });

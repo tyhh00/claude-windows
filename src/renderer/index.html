@@ -94,9 +94,13 @@
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: bottom;
     }
     #win-title[contenteditable="true"] { background: var(--accent-soft); color: var(--text); border-radius: 3px; padding: 0 4px; }
-    #win-menu { min-width: 220px; }
-    #win-menu .wm-current { color: var(--text); }
-    #win-menu .wm-current::before { content: '● '; color: var(--accent); }
+    #win-menu { min-width: 230px; }
+    #win-menu .wm-win { justify-content: space-between; }
+    #win-menu .wm-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #win-menu .wm-closed .wm-name { color: var(--text-3); }
+    #win-menu .wm-tag { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-3); flex: 0 0 auto; margin-left: 8px; }
+    #win-menu .wm-tag.open { color: var(--ok); }
+    #win-menu .wm-current { background: var(--accent-soft); }
     #toolbar .status { margin-left: auto; font-size: 12px; color: var(--text-3); }
 
     .folder-btn {
@@ -170,15 +174,19 @@
       display: flex; flex-direction: column; min-height: 0;
       transition: flex-basis .13s ease, width .13s ease;
     }
-    body.sb-collapsed #sidebar { flex-basis: 0; width: 0; border-right: none; overflow: hidden; }
+    /* Collapsed: a thin rail that shows only the toggle icon (stays on the left, not the top nav). */
+    body.sb-collapsed #sidebar { flex-basis: 46px; width: 46px; }
+    body.sb-collapsed #sb-head { justify-content: center; padding: 0; }
+    body.sb-collapsed .sb-title, body.sb-collapsed #sb-list { display: none; }
     #sb-head {
-      flex: 0 0 auto; display: flex; align-items: center; height: 34px; padding: 0 8px 0 14px;
+      flex: 0 0 auto; display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 8px 0 12px;
       border-bottom: 1px solid var(--border-subtle);
     }
     .sb-title { font-size: 11.5px; font-weight: 650; text-transform: uppercase; letter-spacing: .8px; color: var(--text-2); flex: 1 1 auto; }
     #sb-collapse {
       flex: 0 0 auto; background: transparent; border: none; color: var(--text-3); cursor: pointer;
-      width: 24px; height: 24px; border-radius: var(--radius-sm); font-size: 15px; line-height: 1;
+      width: 28px; height: 28px; border-radius: var(--radius-sm); font-size: 15px; line-height: 1;
+      display: inline-flex; align-items: center; justify-content: center;
     }
     #sb-collapse:hover { background: var(--surface-2); color: var(--text); }
     #sb-list { flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; padding: 6px 0; }
@@ -188,8 +196,10 @@
       cursor: pointer; border-radius: var(--radius-sm);
     }
     .sb-item:hover { background: var(--surface-2); }
-    .sb-item.active { background: var(--accent-soft); }
-    .sb-dot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; background: var(--border-strong); }
+    .sb-item.active { background: var(--surface-2); }
+    .sb-item.active .sb-name { color: var(--accent); }
+    /* A dot only appears for a meaningful state; plain sessions have an invisible spacer (no gray dot). */
+    .sb-dot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; background: transparent; }
     .sb-dot.idle { background: var(--idle); box-shadow: 0 0 7px var(--idle); }
     .sb-dot.permission { background: var(--permission); box-shadow: 0 0 8px var(--permission); animation: breathe 1.6s ease-in-out infinite; }
     .sb-dot.running { background: var(--ok); box-shadow: 0 0 7px var(--ok); animation: pulse 1.4s ease-in-out infinite; }
@@ -377,8 +387,6 @@
       <button id="folder-btn" class="folder-btn" title="Open folder / recent (new sessions start here)">📁 <span id="folder-name">home</span> <span class="caret">▾</span></button>
       <div id="folder-menu" class="menu"></div>
     </div>
-    <!-- kept for compatibility; sidebar collapse now lives in the sessions header -->
-    <button id="sb-toggle" class="icon-btn" title="Show sessions" style="display:none">☰</button>
     <span class="status" id="status"></span>
     <span id="perf-total" title="This window: total CPU / RAM of its sessions"></span>
     <div id="tools-picker" class="picker">
