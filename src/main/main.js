@@ -163,6 +163,41 @@ function launchBase() {
   return (settings.launch && settings.launch.command) || 'claude';
 }
 
+// Resolve a bare command name (e.g. `claude`) to its absolute path ONCE, via a login shell, so every
+// cell launches the binary directly instead of re-resolving it on PATH. A GUI launch starts from the
+// minimal launchd PATH, and per-cell shell init (path_helper, direnv, plugin managers) can rebuild
+// PATH differently across a dozen concurrent resumes — which intermittently left some cells unable to
+// find `claude`. Resolving up front removes that dependency. Fails safe: if we can't resolve to a
+// real absolute file, the original name is used and behaviour is exactly as before.
+const resolvedBin = new Map();
+function resolveBinary(name) {
+  if (!name || name.includes('/') || platform.isWin) return name; // already a path, empty, or Windows
+  if (resolvedBin.has(name)) return resolvedBin.get(name);
+  let resolved = name;
+  try {
+    const { spawnSync } = require('child_process');
+    const sh = platform.loginShell();
+    const r = spawnSync(sh, ['-lic', `command -v ${name} 2>/dev/null`], { encoding: 'utf8', timeout: 8000 });
+    // A login shell may print unrelated noise (history saves, MOTD); take the first line that is an
+    // absolute path to an existing executable. A shell builtin/alias yields no path -> no change.
+    const cand = String((r && r.stdout) || '').split('\n').map((s) => s.trim())
+      .find((p) => p.startsWith('/') && (() => { try { return fs.statSync(p).isFile(); } catch (_) { return false; } })());
+    if (cand) resolved = cand;
+  } catch (_) {}
+  resolvedBin.set(name, resolved);
+  return resolved;
+}
+// Rewrite a launch command so its FIRST token is absolute when we can resolve it (keeping any args).
+function absolutizeLaunch(base) {
+  const b = String(base || '').trim();
+  if (!b) return b;
+  const sp = b.search(/\s/);
+  const first = sp === -1 ? b : b.slice(0, sp);
+  const rest = sp === -1 ? '' : b.slice(sp);
+  const abs = resolveBinary(first);
+  return abs === first ? b : abs + rest;
+}
+
 // ---- Claude profiles (multi-account) ---------------------------------------
 // A "profile" is one CLAUDE_CONFIG_DIR: its own credentials, settings and transcript store. Cells
 // can each run against a different one, which is how several Claude accounts stay live at once.
@@ -593,7 +628,7 @@ function spawnCell(windowId, index, opts = {}) {
   const gid = `${windowId}#${index}`;
   let cwd = opts.cwd || folderOf(rec); // fresh cells start in this window's own folder
   try { if (!fs.existsSync(cwd)) cwd = defaultCwd(); } catch (_) { cwd = defaultCwd(); }
-  const base = launchBase();
+  const base = absolutizeLaunch(launchBase());
   const line = opts.resumeId && base ? `${base} --resume ${opts.resumeId}` : base;
   const { file, args } = platform.cellCommand(line);
 
@@ -719,6 +754,9 @@ app.whenReady().then(async () => {
   }
   loadSettings();
   currentWorkspace = resolveWorkspace(); // a sensible default; the grid only opens once a folder is chosen
+  // Resolve the launch binary's absolute path once, off the critical path, so the first cell spawn
+  // doesn't block and every cell launches the same resolved binary (see resolveBinary).
+  try { const b = launchBase(); if (b) absolutizeLaunch(b); } catch (_) {}
   if (settings.autoHooks !== false) { try { installHooksEverywhere(); } catch (_) {} }
   await initSignal();
   applyPerfSetting();

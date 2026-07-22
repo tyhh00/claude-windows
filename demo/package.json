@@ -1,0 +1,18 @@
+{
+  "name": "hna-code-demo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Demo capture + render pipeline for HNA-Code README GIFs. Not part of the shipped app.",
+  "scripts": {
+    "capture:accounts": "node scene-accounts.mjs",
+    "render": "node render.mjs"
+  },
+  "dependencies": {
+    "@remotion/bundler": "^4.0.380",
+    "@remotion/renderer": "^4.0.380",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "remotion": "^4.0.380"
+  }
+}

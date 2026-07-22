@@ -7,3 +7,7 @@ undefined/
 docs/FEATURELOG.md
 docs/NEXT-SESSION.md
 docs/RELEASING.md
+
+# demo pipeline: recorded frames + rendered intermediates (GIFs live in docs/media)
+demo/frames/
+demo/out/

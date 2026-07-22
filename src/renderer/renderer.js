@@ -772,6 +772,14 @@ function setLayout(key) {
 }
 window.__setLayout = (key) => setLayout(key);
 window.__switchPane = (dir, paneIndex = 0) => switchPaneProfile(panes[paneIndex], dir);
+// Demo helper: collapse each pane to just its active session, for a clean board in recordings.
+window.__cleanBoard = () => { for (const p of panes) { if (!p) continue; for (const sid of [...p.tabs]) if (sid !== p.active) closeTab(p, sid); } updateStatus(); };
+// Demo helpers: drive glow / running / sidebar-presence directly, to stage the signature states in a
+// recording without needing a live agent to emit real hook signals.
+window.__setGlow = (sid, s) => setGlow(String(sid), s, { persist: false });
+window.__setRunning = (sid, on) => setRunning(String(sid), on);
+window.__markReal = (sid, topic) => { const r = terms.get(String(sid)); if (r) { r.real = true; if (topic) r.topic = topic; r.lastActivity = Date.now(); } scheduleSidebar(); };
+window.__rename = (sid, name) => { const r = terms.get(String(sid)); if (r) { r.name = name; window.grid.rename(String(sid), name); const p = paneOf(String(sid)); if (p) renderTabs(p); } scheduleSidebar(); };
 
 function buildLayoutPicker() {
   const btn = document.getElementById('layout-btn');
