@@ -48,6 +48,7 @@ contextBridge.exposeInMainWorld('grid', {
   scanProject: (dir) => ipcRenderer.invoke('sessions:scanProject', dir),
   importSession: (cellId, sessionId, cwd, cols, rows) => ipcRenderer.invoke('cell:importSession', cellId, sessionId, cwd, cols, rows),
   reloadCell: (cellId, cols, rows) => ipcRenderer.invoke('cell:reload', cellId, cols, rows),
+  openSessionIds: () => ipcRenderer.invoke('window:openSessions'),
   newWindowWithSessions: (list) => ipcRenderer.invoke('window:newWithSessions', list),
   markImportSeen: () => ipcRenderer.send('workspace:importSeen'),
   openInVsCode: (cellId) => ipcRenderer.send('cell:openInVsCode', cellId),

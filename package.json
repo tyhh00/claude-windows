@@ -13,7 +13,7 @@
     "pack:linux": "electron-builder --linux",
     "pack:dir": "electron-builder --dir",
     "icons": "node build/gen-icons.mjs",
-    "test": "node test/hooks.cjs && node test/smoke.mjs && node test/grid.mjs && node test/signal.mjs && node test/glow.mjs && node test/persist.mjs && node test/settings.mjs && node test/multiwindow.mjs && node test/perf.mjs && node test/tabs.mjs && node test/workspaces.mjs && node test/sidebar.mjs && node test/home.mjs && node test/import.mjs && node test/import-manual.mjs && node test/launch-resolve.mjs && node test/accounts.mjs && node test/overflow.mjs && node test/reload.mjs",
+    "test": "node test/hooks.cjs && node test/smoke.mjs && node test/grid.mjs && node test/signal.mjs && node test/glow.mjs && node test/persist.mjs && node test/settings.mjs && node test/multiwindow.mjs && node test/perf.mjs && node test/tabs.mjs && node test/workspaces.mjs && node test/sidebar.mjs && node test/home.mjs && node test/import.mjs && node test/import-manual.mjs && node test/launch-resolve.mjs && node test/accounts.mjs && node test/overflow.mjs && node test/reload.mjs && node test/import-additive.mjs",
     "test:smoke": "node test/smoke.mjs",
     "test:grid": "node test/grid.mjs",
     "test:signal": "node test/signal.mjs",
@@ -31,7 +31,8 @@
     "test:accounts": "node test/accounts.mjs",
     "test:overflow": "node test/overflow.mjs",
     "test:launch-resolve": "node test/launch-resolve.mjs",
-    "test:reload": "node test/reload.mjs"
+    "test:reload": "node test/reload.mjs",
+    "test:import-additive": "node test/import-additive.mjs"
   },
   "dependencies": {
     "@lydell/node-pty": "^1.1.0",

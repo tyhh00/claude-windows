@@ -895,6 +895,12 @@ app.whenReady().then(async () => {
     settings.seenImport[normFolder(folderOf(recFromEvent(e)))] = true;
     saveSettings();
   });
+  // The sessions already live in THIS window — the importer dedupes against these and marks them
+  // in its list so a re-import can't clobber or duplicate an open conversation.
+  ipcMain.handle('window:openSessions', (e) => {
+    const rec = recFromEvent(e); if (!rec) return [];
+    return Object.values(rec.state.cells || {}).map((c) => c && c.sessionId).filter(Boolean);
+  });
   // Settings importer: browse every Claude project and pull specific sessions in (each resumes in
   // its own original folder, so nothing gets copied out of Claude's normal store).
   ipcMain.handle('sessions:projects', () => listProjects());

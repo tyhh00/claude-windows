@@ -822,6 +822,9 @@ window.__setGlow = (sid, s) => setGlow(String(sid), s, { persist: false });
 window.__setRunning = (sid, on) => setRunning(String(sid), on);
 window.__markReal = (sid, topic) => { const r = terms.get(String(sid)); if (r) { r.real = true; if (topic) r.topic = topic; r.lastActivity = Date.now(); } scheduleSidebar(); };
 window.__rename = (sid, name) => { const r = terms.get(String(sid)); if (r) { r.name = name; window.grid.rename(String(sid), name); const p = paneOf(String(sid)); if (p) renderTabs(p); } scheduleSidebar(); };
+// Test hooks: drive the importer without clicking through Settings.
+window.__doImport = (sessions) => doImport(sessions);
+window.__showImport = (scan, manual) => showImport(scan, manual);
 
 function buildLayoutPicker() {
   const btn = document.getElementById('layout-btn');
@@ -1137,6 +1140,7 @@ function askOverflow(nHere, nOver) {
 }
 
 let importScan = null; // { folder, sessions:[{sessionId,title,mtime}] }
+let importOpenIds = new Set(); // sessions already live in this window -> marked + unselectable
 function fmtDate(ms) {
   if (!ms) return '';
   try { return new Date(ms).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); }
@@ -1162,16 +1166,22 @@ function renderImportList() {
     updateImportCount();
     return;
   }
-  listEl.innerHTML = importScan.sessions.map((s) =>
-    `<label class="imp-row">` +
-    `<input type="checkbox" data-sid="${escapeHtml(s.sessionId)}" data-mtime="${s.mtime || 0}" checked />` +
-    `<span class="imp-body"><span class="imp-title">${escapeHtml(s.title)}</span>` +
-    `<span class="imp-date">${fmtDate(s.mtime)}</span></span></label>`).join('');
+  listEl.innerHTML = importScan.sessions.map((s) => {
+    // A session that's already open in this window can't be re-imported — show it, marked, so the
+    // user can tell which of the list is new.
+    const open = importOpenIds.has(s.sessionId);
+    return `<label class="imp-row${open ? ' imp-open' : ''}">` +
+      `<input type="checkbox" data-sid="${escapeHtml(s.sessionId)}" data-mtime="${s.mtime || 0}" ${open ? 'disabled' : 'checked'} />` +
+      `<span class="imp-body"><span class="imp-title">${escapeHtml(s.title)}` +
+      `${open ? '<span class="imp-here">in this window</span>' : ''}</span>` +
+      `<span class="imp-date">${fmtDate(s.mtime)}</span></span></label>`;
+  }).join('');
   listEl.querySelectorAll('input').forEach((c) => c.addEventListener('change', updateImportCount));
   updateImportCount();
 }
-function showImport(scan, manual = false) {
+async function showImport(scan, manual = false) {
   importScan = scan;
+  try { importOpenIds = new Set(await window.grid.openSessionIds()); } catch (_) { importOpenIds = new Set(); }
   const n = scan.sessions.length;
   document.getElementById('imp-project-row').style.display = manual ? '' : 'none';
   document.getElementById('import-desc').textContent = manual
@@ -1213,32 +1223,59 @@ async function maybeShowImport() {
   try { scan = await window.grid.scanWorkspace(); } catch (_) { return; }
   if (scan && scan.sessions && scan.sessions.length) showImport(scan);
 }
+// A pane an import may land in: an empty pane (the "+ New session" area after a ✕) or one whose
+// active cell is a brand-new terminal that hasn't started a conversation (rec.real is false).
+// Panes holding a real conversation are never import targets.
+function importFreeSlots() {
+  return panes.filter((p) => p && (!p.active || !(terms.get(p.active) || {}).real));
+}
 async function doImport(selected) {
   hideImport();
   window.grid.markImportSeen();
   importSeenAtBoot = true;
   if (!selected.length) return;
   const folder = importScan ? importScan.folder : null;
-  if (panes.length < selected.length) setLayout(fitLayoutKey(selected.length));
-  const capacity = panes.length;
-  const here = selected.slice(0, capacity);
-  const overflow = selected.slice(capacity);
+  // Importing is ADDITIVE: skip anything already live in this window (and duplicates within the
+  // selection itself), then land only in free slots — never on top of a real conversation.
+  let openIds = new Set();
+  try { openIds = new Set(await window.grid.openSessionIds()); } catch (_) {}
+  const picked = new Set();
+  selected = selected.filter((s) => {
+    if (openIds.has(s.sessionId) || picked.has(s.sessionId)) return false;
+    picked.add(s.sessionId);
+    return true;
+  });
+  if (!selected.length) return;
+
+  // If the free slots don't fit the selection, grow the grid — the new panes are free too.
+  if (importFreeSlots().length < selected.length) {
+    const used = panes.filter(Boolean).length - importFreeSlots().length;
+    setLayout(fitLayoutKey(used + selected.length));
+  }
+  const free = importFreeSlots();
+  const here = selected.slice(0, free.length);
+  const overflow = selected.slice(free.length);
 
   // Decide the overflow destination BEFORE resuming anything, so the dialog isn't competing
   // with a grid that's already animating sessions in.
   const choice = overflow.length ? await askOverflow(here.length, overflow.length) : null;
 
   for (let i = 0; i < here.length; i++) {
-    const pane = panes[i]; if (!pane || !pane.active) continue;
-    const sid = pane.active; const rec = terms.get(sid); if (!rec) continue;
-    try { rec.term.reset(); } catch (_) {}
-    const name = importName(here[i], rec.name);
-    rec.name = name;
-    flashArrive(pane.el);
-    // Resume each session in ITS OWN folder (where Claude stored it), not the current workspace.
-    await window.grid.importSession(sid, here[i].sessionId, here[i].cwd || folder, rec.term.cols, rec.term.rows);
-    window.grid.rename(sid, name);
-    renderTabs(pane);
+    const pane = free[i]; const s = here[i];
+    if (!pane.active) {
+      // Empty pane -> the session opens as a fresh tab right where the ✕'d one used to be.
+      await resumeIntoPaneTab(pane, s, folder);
+    } else {
+      const sid = pane.active; const rec = terms.get(sid); if (!rec) continue;
+      try { rec.term.reset(); } catch (_) {}
+      const name = importName(s, rec.name);
+      rec.name = name;
+      flashArrive(pane.el);
+      // Resume each session in ITS OWN folder (where Claude stored it), not the current workspace.
+      await window.grid.importSession(sid, s.sessionId, s.cwd || folder, rec.term.cols, rec.term.rows);
+      window.grid.rename(sid, name);
+      renderTabs(pane);
+    }
     if (i < here.length - 1) await sleep(STAGGER_MS);
   }
   scheduleSidebar();
@@ -1267,14 +1304,14 @@ async function doImport(selected) {
 }
 function initImport() {
   document.getElementById('imp-all').addEventListener('click', () => {
-    document.querySelectorAll('#imp-list .imp-row input').forEach((c) => (c.checked = true)); updateImportCount();
+    document.querySelectorAll('#imp-list .imp-row input').forEach((c) => { if (!c.disabled) c.checked = true; }); updateImportCount();
   });
   document.getElementById('imp-none').addEventListener('click', () => {
     document.querySelectorAll('#imp-list .imp-row input').forEach((c) => (c.checked = false)); updateImportCount();
   });
   document.getElementById('imp-after').addEventListener('change', (e) => {
     const cut = e.target.value ? new Date(e.target.value).getTime() : 0;
-    document.querySelectorAll('#imp-list .imp-row input').forEach((c) => { c.checked = (+c.dataset.mtime >= cut); });
+    document.querySelectorAll('#imp-list .imp-row input').forEach((c) => { c.checked = !c.disabled && (+c.dataset.mtime >= cut); });
     updateImportCount();
   });
   document.getElementById('imp-skip').addEventListener('click', () => {
